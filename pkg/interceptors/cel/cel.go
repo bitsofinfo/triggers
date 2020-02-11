@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strings"
 
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/google/cel-go/cel"
@@ -149,13 +150,20 @@ func embeddedFunctions() cel.ProgramOption {
 			Operator: "match",
 			Function: matchHeader},
 		&functions.Overload{
+			Operator: "canonical",
+			Binary:   canonicalHeader},
+		&functions.Overload{
 			Operator: "truncate",
 			Binary:   truncateString},
+		&functions.Overload{
+			Operator: "split",
+			Binary:   splitString},
 	)
 
 }
 func makeCelEnv() (cel.Env, error) {
 	mapStrDyn := decls.NewMapType(decls.String, decls.Dyn)
+	listStr := decls.NewListType(decls.String)
 	return cel.NewEnv(
 		cel.Declarations(
 			decls.NewIdent("body", mapStrDyn, nil),
@@ -163,10 +171,15 @@ func makeCelEnv() (cel.Env, error) {
 			decls.NewFunction("match",
 				decls.NewInstanceOverload("match_map_string_string",
 					[]*exprpb.Type{mapStrDyn, decls.String, decls.String}, decls.Bool)),
+			decls.NewFunction("split",
+				decls.NewOverload("split_dyn_string_dyn",
+					[]*exprpb.Type{decls.Dyn, decls.String}, listStr)),
+			decls.NewFunction("canonical",
+				decls.NewInstanceOverload("canonical_map_string",
+					[]*exprpb.Type{mapStrDyn, decls.String}, decls.String)),
 			decls.NewFunction("truncate",
 				decls.NewOverload("truncate_string_uint",
 					[]*exprpb.Type{decls.String, decls.Int}, decls.String))))
-
 }
 
 func makeEvalContext(body []byte, r *http.Request) (map[string]interface{}, error) {
@@ -196,7 +209,6 @@ func matchHeader(vals ...ref.Val) ref.Val {
 	}
 
 	return types.Bool(h.(http.Header).Get(string(key)) == string(val))
-
 }
 
 func truncateString(lhs, rhs ref.Val) ref.Val {
@@ -210,7 +222,37 @@ func truncateString(lhs, rhs ref.Val) ref.Val {
 		return types.ValOrErr(n, "unexpected type '%v' passed to truncate", rhs.Type())
 	}
 
-	return types.Bytes([]byte(str[:max(n, types.Int(len(str)))]))
+	return types.String(str[:max(n, types.Int(len(str)))])
+}
+
+func splitString(lhs, rhs ref.Val) ref.Val {
+	str, ok := lhs.(types.String)
+	if !ok {
+		return types.ValOrErr(str, "unexpected type '%v' passed to splitString", lhs.Type())
+	}
+
+	splitStr, ok := rhs.(types.String)
+	if !ok {
+		return types.ValOrErr(str, "unexpected type '%v' passed to splitString", lhs.Type())
+	}
+
+	r := types.NewRegistry()
+	splitVals := strings.Split(string(str), string(splitStr))
+	return types.NewStringList(r, splitVals)
+}
+
+func canonicalHeader(lhs, rhs ref.Val) ref.Val {
+	h, err := lhs.ConvertToNative(reflect.TypeOf(http.Header{}))
+	if err != nil {
+		return types.NewErr("failed to convert to http.Header: %w", err)
+	}
+
+	key, ok := rhs.(types.String)
+	if !ok {
+		return types.ValOrErr(key, "unexpected type '%v' passed to canonical", rhs.Type())
+	}
+
+	return types.String(h.(http.Header).Get(string(key)))
 }
 
 func max(x, y types.Int) types.Int {

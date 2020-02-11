@@ -18,18 +18,23 @@ package v1alpha1_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/triggers/pkg/apis/triggers/v1alpha1"
 	b "github.com/tektoncd/triggers/test/builder"
+
+	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/apis"
 )
 
-var simpleResourceTemplate = json.RawMessage(`{ "apiVersion": "tekton.dev/v1alpha1", "kind": "pipelinerun"}`)
-var paramResourceTemplate = json.RawMessage(`{"apiVersion": "tekton.dev/v1alpha1", "kind": "pipelinerun", "spec": "$(params.foo)"}`)
+var simpleResourceTemplate = runtime.RawExtension{
+	Raw: []byte(`{"kind":"PipelineRun","apiVersion":"tekton.dev/v1alpha1","metadata":{"creationTimestamp":null},"spec":{},"status":{}}`),
+}
+var paramResourceTemplate = runtime.RawExtension{
+	Raw: []byte(`{"kind":"PipelineRun","apiVersion":"tekton.dev/v1alpha1","metadata":{"creationTimestamp":null},"spec": "$(params.foo)","status":{}}`),
+}
 
 func TestTriggerTemplate_Validate(t *testing.T) {
 	tcs := []struct {
@@ -54,7 +59,7 @@ func TestTriggerTemplate_Validate(t *testing.T) {
 		name: "resource template missing kind",
 		template: b.TriggerTemplate("tt", "foo", b.TriggerTemplateSpec(
 			b.TriggerTemplateParam("foo", "desc", "val"),
-			b.TriggerResourceTemplate(json.RawMessage(`{"apiVersion": "foo"}`)))),
+			b.TriggerResourceTemplate(runtime.RawExtension{Raw: []byte(`{"apiVersion": "foo"}`)}))),
 		want: &apis.FieldError{
 			Message: "missing field(s)",
 			Paths:   []string{"spec.resourcetemplates[0].kind"},
@@ -63,7 +68,7 @@ func TestTriggerTemplate_Validate(t *testing.T) {
 		name: "resource template missing apiVersion",
 		template: b.TriggerTemplate("tt", "foo", b.TriggerTemplateSpec(
 			b.TriggerTemplateParam("foo", "desc", "val"),
-			b.TriggerResourceTemplate(json.RawMessage(`{"kind": "foo"}`)))),
+			b.TriggerResourceTemplate(runtime.RawExtension{Raw: []byte(`{"kind": "foo"}`)}))),
 		want: &apis.FieldError{
 			Message: "missing field(s)",
 			Paths:   []string{"spec.resourcetemplates[0].apiVersion"},
@@ -72,18 +77,18 @@ func TestTriggerTemplate_Validate(t *testing.T) {
 		name: "resource template invalid apiVersion",
 		template: b.TriggerTemplate("tt", "foo", b.TriggerTemplateSpec(
 			b.TriggerTemplateParam("foo", "desc", "val"),
-			b.TriggerResourceTemplate(json.RawMessage(`{"kind": "pipelinerun", "apiVersion": "foobar"}`)))),
+			b.TriggerResourceTemplate(runtime.RawExtension{Raw: []byte(`{"kind": "pipelinerun", "apiVersion": "foobar"}`)}))),
 		want: &apis.FieldError{
-			Message: "invalid value: resource type not allowed: apiVersion: foobar, kind: pipelinerun",
+			Message: `invalid value: no kind "pipelinerun" is registered for version "foobar"`,
 			Paths:   []string{"spec.resourcetemplates[0]"},
 		},
 	}, {
 		name: "resource template invalid kind",
 		template: b.TriggerTemplate("tt", "foo", b.TriggerTemplateSpec(
 			b.TriggerTemplateParam("foo", "desc", "val"),
-			b.TriggerResourceTemplate(json.RawMessage(`{"kind": "tekton.dev/v1alpha1", "apiVersion": "foo"}`)))),
+			b.TriggerResourceTemplate(runtime.RawExtension{Raw: []byte(`{"kind": "tekton.dev/v1alpha1", "apiVersion": "foo"}`)}))),
 		want: &apis.FieldError{
-			Message: "invalid value: resource type not allowed: apiVersion: foo, kind: tekton.dev/v1alpha1",
+			Message: `invalid value: no kind "tekton.dev/v1alpha1" is registered for version "foo"`,
 			Paths:   []string{"spec.resourcetemplates[0]"},
 		},
 	}, {

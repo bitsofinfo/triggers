@@ -3,8 +3,9 @@
 The CEL expression is configured to expose parts of the request, and some custom
 functions to make matching easier.
 
-In addition to the custom function extension listed below, you can craft any valid CEL 
-expression as defined by the [cel-spec language definition](https://github.com/google/cel-spec/blob/master/doc/langdef.md)
+In addition to the custom function extension listed below, you can craft any
+valid CEL expression as defined by the
+[cel-spec language definition](https://github.com/google/cel-spec/blob/master/doc/langdef.md)
 
 ### List of extensions
 
@@ -98,5 +99,31 @@ interceptor.
      <pre>truncate(body.commit.sha, 5)</pre>
     </td>
   </tr>
-
+  <tr>
+    <th>
+      split
+    </th>
+    <td>
+      (string, string) -> string(dyn)
+    </td>
+    <td>
+      Splits a string on the provided separator value.
+    </td>
+    <td>
+     <pre>split(body.ref, '/')</pre>
+    </td>
+</tr>
+    <th>
+      canonical
+    </th>
+    <td>
+      header.(string) -> string
+    </td>
+    <td>
+      Uses the canonical header matching from Go's http.Request to get the provided header name.
+    </td>
+    <td>
+     <pre>header.canonical('x-test')</pre>
+    </td>
+  </tr>
 </table>
